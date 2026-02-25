@@ -69,17 +69,17 @@ export function LoanPlanner() {
     return (parseNum(inputs.propertyTax) || 0) + (parseNum(inputs.insurance) || 0);
   }, [isMortgage, inputs.propertyTax, inputs.insurance]);
 
-  const parsedStartDate = useMemo(() => {
-    if (!inputs.startDate) return new Date();
-    const [year, month, day] = inputs.startDate.split("-").map(Number);
-    return new Date(year, month - 1, day);
-  }, [inputs.startDate]);
+  // Fixed graph start: always current month, not affected by optional start date field
+  const graphStartDate = useMemo(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  }, []);
 
   const minLumpSumDate = useMemo(() => {
    const today = new Date();
     const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-    return `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-01`;
-  }, [parsedStartDate]);
+    return `${nextMonth.getFullYear()}-${String(nextMonth.getMonth()).padStart(2, "0")}-01`;
+  }, []);
 
   const piPayment = useMemo(() => {
     const total = parseNum(inputs.monthlyPayment) || 0;
@@ -104,8 +104,8 @@ export function LoanPlanner() {
     const balance = parseNum(inputs.balance);
     const annualRate = parseNum(inputs.annualRate);
     if (!balance || !annualRate || !piPayment || balance <= 0 || annualRate <= 0 || piPayment <= 0) return null;
-    return calculateAmortization(balance, annualRate, piPayment, monthlyEscrow, parsedStartDate);
-  }, [inputs.balance, inputs.annualRate, piPayment, monthlyEscrow, parsedStartDate]);
+    return calculateAmortization(balance, annualRate, piPayment, monthlyEscrow, graphStartDate);
+  }, [inputs.balance, inputs.annualRate, piPayment, monthlyEscrow, graphStartDate]);
 
   // Whether any extra payment inputs are filled in
   const hasExtraPayments = useMemo(() => {
@@ -119,9 +119,9 @@ export function LoanPlanner() {
     const balance = parseNum(inputs.balance);
     const annualRate = parseNum(inputs.annualRate);
     const extra = parseNum(extraMonthly) || 0;
-    const lumpMap = buildLumpSumMap(lumpSums, parsedStartDate);
-    return calculateAmortization(balance, annualRate, piPayment, monthlyEscrow, parsedStartDate, extra, lumpMap);
-  }, [schedule, hasExtraPayments, inputs.balance, inputs.annualRate, extraMonthly, lumpSums, piPayment, monthlyEscrow, parsedStartDate]);
+    const lumpMap = buildLumpSumMap(lumpSums, graphStartDate);
+    return calculateAmortization(balance, annualRate, piPayment, monthlyEscrow, graphStartDate, extra, lumpMap);
+  }, [schedule, hasExtraPayments, inputs.balance, inputs.annualRate, extraMonthly, lumpSums, piPayment, monthlyEscrow, graphStartDate]);
 
   // Merge original + modified into combined chart rows, then downsample
   const combinedChartData = useMemo((): CombinedChartRow[] => {

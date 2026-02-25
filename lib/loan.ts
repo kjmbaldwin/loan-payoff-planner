@@ -109,7 +109,7 @@ export function buildLumpSumMap(lumpSums: LumpSumInput[], startDate: Date): Map<
     const amount = parseFloat(ls.amount.replace(/[^0-9.]/g, ""));
     if (!ls.date || !amount || amount <= 0) continue;
     const [year, month] = ls.date.split("-").map(Number);
-    const offset = (year - startDate.getFullYear()) * 12 + (month - 1 - startDate.getMonth());
+    const offset = (year - startDate.getFullYear()) * 12 + (month - startDate.getMonth());
     if (offset >= 1) {
       map.set(offset, (map.get(offset) ?? 0) + amount);
     }
