@@ -20,6 +20,17 @@ export interface AmortizationRow {
   escrow: number;
 }
 
+// AmortizationRow extended with an optional modified balance for chart comparison
+export interface CombinedChartRow extends AmortizationRow {
+  modified: number | null;
+}
+
+export interface LumpSumInput {
+  id: string;
+  amount: string;
+  date: string; // "YYYY-MM"
+}
+
 export interface LoanStats {
   totalInterest: number;
   totalPrincipal: number;
@@ -48,7 +59,9 @@ export function calculateAmortization(
   annualRate: number,
   piPayment: number,
   monthlyEscrow: number,
-  startDate: Date
+  startDate: Date,
+  extraMonthly = 0,
+  lumpSumMap: Map<number, number> = new Map()
 ): AmortizationRow[] {
   const monthlyRate = annualRate / 100 / 12;
   const rows: AmortizationRow[] = [];
@@ -64,17 +77,44 @@ export function calculateAmortization(
     }
 
     const interestCharge = remaining * monthlyRate;
-    const principalPayment = Math.min(piPayment - interestCharge, remaining);
+    const regularPrincipal = Math.min(piPayment + extraMonthly - interestCharge, remaining);
 
-    if (principalPayment <= 0) break;
+    if (regularPrincipal <= 0) break;
 
-    remaining = Math.max(remaining - principalPayment, 0);
-    rows.push({ month, label, balance: remaining, principal: principalPayment, interest: interestCharge, escrow: monthlyEscrow });
+    remaining -= regularPrincipal;
+
+    // Apply lump sum as additional principal after the regular payment
+    const lumpSumAmount = Math.min(lumpSumMap.get(month) ?? 0, remaining);
+    remaining = Math.max(remaining - lumpSumAmount, 0);
+
+    rows.push({
+      month,
+      label,
+      balance: remaining,
+      principal: regularPrincipal + lumpSumAmount,
+      interest: interestCharge,
+      escrow: monthlyEscrow,
+    });
 
     if (remaining === 0) break;
   }
 
   return rows;
+}
+
+/** Convert an array of LumpSumInputs into a month-offset → amount map. */
+export function buildLumpSumMap(lumpSums: LumpSumInput[], startDate: Date): Map<number, number> {
+  const map = new Map<number, number>();
+  for (const ls of lumpSums) {
+    const amount = parseFloat(ls.amount.replace(/[^0-9.]/g, ""));
+    if (!ls.date || !amount || amount <= 0) continue;
+    const [year, month] = ls.date.split("-").map(Number);
+    const offset = (year - startDate.getFullYear()) * 12 + (month - 1 - startDate.getMonth());
+    if (offset >= 1) {
+      map.set(offset, (map.get(offset) ?? 0) + amount);
+    }
+  }
+  return map;
 }
 
 export function fmt(value: number): string {

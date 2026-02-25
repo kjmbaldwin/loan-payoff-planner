@@ -4,8 +4,11 @@ import { useState, useMemo } from "react";
 import {
   LoanInputs,
   LoanType,
+  LumpSumInput,
   StatCard,
+  CombinedChartRow,
   calculateAmortization,
+  buildLumpSumMap,
   fmt,
   fmtExact,
 } from "@/lib/loan";
@@ -15,6 +18,7 @@ import { EscrowFields } from "@/components/EscrowFields";
 import { OptionalDetails } from "@/components/OptionalDetails";
 import { LoanStats } from "@/components/LoanStats";
 import { ProgressBar } from "@/components/ProgressBar";
+import { ExtraPayments } from "@/components/ExtraPayments";
 import { BalanceChart } from "@/components/BalanceChart";
 
 const DEFAULT_INPUTS: LoanInputs = {
@@ -32,11 +36,30 @@ function parseNum(s: string): number {
   return parseFloat(s.replace(/[^0-9.]/g, ""));
 }
 
+let lumpSumCounter = 0;
+function newLumpSum(date = ""): LumpSumInput {
+  return { id: String(++lumpSumCounter), amount: "", date };
+}
+
 export function LoanPlanner() {
   const [inputs, setInputs] = useState<LoanInputs>(DEFAULT_INPUTS);
+  const [extraMonthly, setExtraMonthly] = useState("");
+  const [lumpSums, setLumpSums] = useState<LumpSumInput[]>([]);
 
   function handleChange(field: keyof LoanInputs, value: string) {
     setInputs((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function addLumpSum() {
+    setLumpSums((prev) => [...prev, newLumpSum(minLumpSumDate)]);
+  }
+
+  function removeLumpSum(id: string) {
+    setLumpSums((prev) => prev.filter((ls) => ls.id !== id));
+  }
+
+  function handleLumpSumChange(id: string, field: "amount" | "date", value: string) {
+    setLumpSums((prev) => prev.map((ls) => (ls.id === id ? { ...ls, [field]: value } : ls)));
   }
 
   const isMortgage = inputs.loanType === "mortgage";
@@ -51,6 +74,12 @@ export function LoanPlanner() {
     const [year, month, day] = inputs.startDate.split("-").map(Number);
     return new Date(year, month - 1, day);
   }, [inputs.startDate]);
+
+  const minLumpSumDate = useMemo(() => {
+   const today = new Date();
+    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    return `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-01`;
+  }, [parsedStartDate]);
 
   const piPayment = useMemo(() => {
     const total = parseNum(inputs.monthlyPayment) || 0;
@@ -70,12 +99,50 @@ export function LoanPlanner() {
     return total > 0 && monthlyEscrow >= total;
   }, [isMortgage, inputs.monthlyPayment, monthlyEscrow]);
 
+  // Base amortization (no extra payments)
   const schedule = useMemo(() => {
     const balance = parseNum(inputs.balance);
     const annualRate = parseNum(inputs.annualRate);
     if (!balance || !annualRate || !piPayment || balance <= 0 || annualRate <= 0 || piPayment <= 0) return null;
     return calculateAmortization(balance, annualRate, piPayment, monthlyEscrow, parsedStartDate);
   }, [inputs.balance, inputs.annualRate, piPayment, monthlyEscrow, parsedStartDate]);
+
+  // Whether any extra payment inputs are filled in
+  const hasExtraPayments = useMemo(() => {
+    if ((parseNum(extraMonthly) || 0) > 0) return true;
+    return lumpSums.some((ls) => (parseNum(ls.amount) || 0) > 0 && ls.date);
+  }, [extraMonthly, lumpSums]);
+
+  // Modified amortization (with extra payments)
+  const modifiedSchedule = useMemo(() => {
+    if (!schedule || !hasExtraPayments) return null;
+    const balance = parseNum(inputs.balance);
+    const annualRate = parseNum(inputs.annualRate);
+    const extra = parseNum(extraMonthly) || 0;
+    const lumpMap = buildLumpSumMap(lumpSums, parsedStartDate);
+    return calculateAmortization(balance, annualRate, piPayment, monthlyEscrow, parsedStartDate, extra, lumpMap);
+  }, [schedule, hasExtraPayments, inputs.balance, inputs.annualRate, extraMonthly, lumpSums, piPayment, monthlyEscrow, parsedStartDate]);
+
+  // Merge original + modified into combined chart rows, then downsample
+  const combinedChartData = useMemo((): CombinedChartRow[] => {
+    if (!schedule) return [];
+
+    const modMap = new Map<number, number>();
+    if (modifiedSchedule) {
+      for (const row of modifiedSchedule) modMap.set(row.month, row.balance);
+    }
+
+    const combined: CombinedChartRow[] = schedule.map((row) => ({
+      ...row,
+      modified: modifiedSchedule
+        ? (modMap.has(row.month) ? modMap.get(row.month)! : null)
+        : null,
+    }));
+
+    if (combined.length <= 120) return combined;
+    const step = Math.ceil(combined.length / 120);
+    return combined.filter((_, i) => i % step === 0 || i === combined.length - 1);
+  }, [schedule, modifiedSchedule]);
 
   const stats = useMemo(() => {
     if (!schedule) return null;
@@ -94,12 +161,19 @@ export function LoanPlanner() {
     return { totalInterest, totalPrincipal, totalEscrow, totalPaid, paymentsLeft, payoffDate, principalPaid, pctPaid, opening };
   }, [schedule, monthlyEscrow, inputs.openingBalance, inputs.balance]);
 
-  const chartData = useMemo(() => {
-    if (!schedule) return [];
-    if (schedule.length <= 120) return schedule;
-    const step = Math.ceil(schedule.length / 120);
-    return schedule.filter((_, i) => i % step === 0 || i === schedule.length - 1);
-  }, [schedule]);
+  // Savings from extra payments
+  const savingsStats = useMemo(() => {
+    if (!schedule || !modifiedSchedule) return null;
+    const origMonths = schedule.length - 1;
+    const modMonths = modifiedSchedule.length - 1;
+    const origInterest = schedule.slice(1).reduce((sum, r) => sum + r.interest, 0);
+    const modInterest = modifiedSchedule.slice(1).reduce((sum, r) => sum + r.interest, 0);
+    return {
+      monthsSaved: origMonths - modMonths,
+      interestSaved: origInterest - modInterest,
+      newPayoffDate: modifiedSchedule[modifiedSchedule.length - 1]?.label ?? "",
+    };
+  }, [schedule, modifiedSchedule]);
 
   const statCards = useMemo((): StatCard[] => {
     if (!stats) return [];
@@ -125,7 +199,7 @@ export function LoanPlanner() {
 
   return (
     <main className="max-w-5xl mx-auto px-6 py-8 space-y-8">
-      {/* Form card */}
+      {/* Loan form card */}
       <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-6">
         <LoanTypeSelector
           value={inputs.loanType}
@@ -187,8 +261,10 @@ export function LoanPlanner() {
         />
       </section>
 
+      {/* Stats */}
       {showResults && statCards.length > 0 && <LoanStats cards={statCards} />}
 
+      {/* Progress bar */}
       {showResults && stats?.pctPaid !== null && stats?.pctPaid !== undefined && (
         <ProgressBar
           pctPaid={stats.pctPaid}
@@ -197,10 +273,51 @@ export function LoanPlanner() {
         />
       )}
 
-      {showResults && chartData.length > 0 && (
-        <BalanceChart data={chartData} isMortgage={isMortgage} />
+      {/* Extra payments */}
+      {showResults && (
+        <ExtraPayments
+          extraMonthly={extraMonthly}
+          lumpSums={lumpSums}
+          minDate={minLumpSumDate}
+          onExtraMonthlyChange={setExtraMonthly}
+          onAddLumpSum={addLumpSum}
+          onRemoveLumpSum={removeLumpSum}
+          onLumpSumChange={handleLumpSumChange}
+        />
       )}
 
+      {/* Savings summary */}
+      {showResults && savingsStats && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-6 py-5">
+          <p className="text-sm font-semibold text-emerald-800 mb-3">Savings with extra payments</p>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <p className="text-xs text-emerald-600 uppercase tracking-wide font-medium">Months Saved</p>
+              <p className="text-2xl font-bold text-emerald-700 mt-0.5">{savingsStats.monthsSaved}</p>
+              <p className="text-xs text-emerald-600">{(savingsStats.monthsSaved / 12).toFixed(1)} years</p>
+            </div>
+            <div>
+              <p className="text-xs text-emerald-600 uppercase tracking-wide font-medium">Interest Saved</p>
+              <p className="text-2xl font-bold text-emerald-700 mt-0.5">{fmt(savingsStats.interestSaved)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-emerald-600 uppercase tracking-wide font-medium">New Payoff Date</p>
+              <p className="text-2xl font-bold text-emerald-700 mt-0.5">{savingsStats.newPayoffDate}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chart */}
+      {showResults && combinedChartData.length > 0 && (
+        <BalanceChart
+          data={combinedChartData}
+          isMortgage={isMortgage}
+          hasModified={hasExtraPayments && modifiedSchedule !== null}
+        />
+      )}
+
+      {/* Empty state */}
       {!schedule && (
         <div className="text-center py-16 text-gray-400">
           <p className="text-4xl mb-3">📊</p>
