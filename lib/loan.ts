@@ -49,6 +49,11 @@ export interface StatCard {
   sub: string;
 }
 
+export interface LoanMeta {
+  id: string;
+  name: string;
+}
+
 export const LOAN_TYPES: { value: LoanType; label: string; description: string }[] = [
   { value: "standard", label: "Standard", description: "Auto, personal, student — full payment goes toward P&I" },
   { value: "mortgage", label: "Mortgage", description: "Includes escrow for property tax & insurance (PITI)" },

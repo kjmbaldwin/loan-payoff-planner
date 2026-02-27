@@ -56,9 +56,10 @@ interface BalanceChartProps {
   data: CombinedChartRow[];
   isMortgage: boolean;
   hasModified: boolean;
+  gradientId?: string;
 }
 
-export function BalanceChart({ data, isMortgage, hasModified }: BalanceChartProps) {
+export function BalanceChart({ data, isMortgage, hasModified, gradientId = "default" }: BalanceChartProps) {
   return (
     <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
       <div className="flex items-center justify-between mb-1">
@@ -85,11 +86,11 @@ export function BalanceChart({ data, isMortgage, hasModified }: BalanceChartProp
       <ResponsiveContainer width="100%" height={320}>
         <AreaChart data={data} margin={{ top: 4, right: 16, left: 16, bottom: 0 }}>
           <defs>
-            <linearGradient id="blueGradient" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={`${gradientId}-blue`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.18} />
               <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.02} />
             </linearGradient>
-            <linearGradient id="greenGradient" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={`${gradientId}-green`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
               <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
             </linearGradient>
@@ -117,7 +118,7 @@ export function BalanceChart({ data, isMortgage, hasModified }: BalanceChartProp
             dataKey="balance"
             stroke="#3b82f6"
             strokeWidth={2}
-            fill="url(#blueGradient)"
+            fill={`url(#${gradientId}-blue)`}
             dot={false}
             activeDot={{ r: 5, fill: "#3b82f6" }}
             connectNulls={false}
@@ -130,7 +131,7 @@ export function BalanceChart({ data, isMortgage, hasModified }: BalanceChartProp
               dataKey="modified"
               stroke="#10b981"
               strokeWidth={2.5}
-              fill="url(#greenGradient)"
+              fill={`url(#${gradientId}-green)`}
               dot={false}
               activeDot={{ r: 5, fill: "#10b981" }}
               connectNulls={false}
