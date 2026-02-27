@@ -3,9 +3,12 @@ import { DollarInput } from "@/components/DollarInput";
 
 interface ExtraPaymentsProps {
   extraMonthly: string;
+  extraMonthlyStartDate: string; // "YYYY-MM-DD"
+  minExtraMonthlyDate: string; // "YYYY-MM-DD" — earliest selectable date
   lumpSums: LumpSumInput[];
   minDate: string; // "YYYY-MM-DD" — earliest selectable date
   onExtraMonthlyChange: (value: string) => void;
+  onExtraMonthlyStartDateChange: (value: string) => void;
   onAddLumpSum: () => void;
   onRemoveLumpSum: (id: string) => void;
   onLumpSumChange: (id: string, field: "amount" | "date", value: string) => void;
@@ -13,9 +16,12 @@ interface ExtraPaymentsProps {
 
 export function ExtraPayments({
   extraMonthly,
+  extraMonthlyStartDate,
+  minExtraMonthlyDate,
   lumpSums,
   minDate,
   onExtraMonthlyChange,
+  onExtraMonthlyStartDateChange,
   onAddLumpSum,
   onRemoveLumpSum,
   onLumpSumChange,
@@ -28,14 +34,26 @@ export function ExtraPayments({
       </div>
 
       {/* Extra monthly */}
-      <div className="max-w-xs">
-        <DollarInput
-          label="Additional monthly payment"
-          sublabel="added to every payment"
-          placeholder="200"
-          value={extraMonthly}
-          onChange={onExtraMonthlyChange}
-        />
+      <div className="flex gap-4 items-start">
+        <div className="w-44">
+          <DollarInput
+            label="Additional monthly payment"
+            placeholder="200"
+            value={extraMonthly}
+            onChange={onExtraMonthlyChange}
+          />
+        </div>
+        <div className="w-44">
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Starting month</label>
+          <input
+            type="date"
+            min={minExtraMonthlyDate}
+            value={extraMonthlyStartDate}
+            onChange={(e) => onExtraMonthlyStartDateChange(e.target.value)}
+            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <p className="text-xs text-gray-400 mt-1">Leave blank to start now</p>
+        </div>
       </div>
 
       {/* Lump sums */}

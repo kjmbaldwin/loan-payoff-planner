@@ -44,6 +44,7 @@ function newLumpSum(date = ""): LumpSumInput {
 export function LoanPlanner() {
   const [inputs, setInputs] = useState<LoanInputs>(DEFAULT_INPUTS);
   const [extraMonthly, setExtraMonthly] = useState("");
+  const [extraMonthlyStartDate, setExtraMonthlyStartDate] = useState("");
   const [lumpSums, setLumpSums] = useState<LumpSumInput[]>([]);
 
   function handleChange(field: keyof LoanInputs, value: string) {
@@ -80,6 +81,19 @@ export function LoanPlanner() {
     const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
     return `${nextMonth.getFullYear()}-${String(nextMonth.getMonth()).padStart(2, "0")}-01`;
   }, []);
+
+  const minExtraMonthlyDate = useMemo(() => {
+    const today = new Date();
+    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    return `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-01`;
+  }, []);
+
+  const extraMonthlyStartMonth = useMemo(() => {
+    if (!extraMonthlyStartDate) return 1;
+    const [year, month] = extraMonthlyStartDate.split("-").map(Number);
+    const offset = (year - graphStartDate.getFullYear()) * 12 + (month - graphStartDate.getMonth());
+    return Math.max(offset, 1);
+  }, [extraMonthlyStartDate, graphStartDate]);
 
   const piPayment = useMemo(() => {
     const total = parseNum(inputs.monthlyPayment) || 0;
@@ -120,8 +134,8 @@ export function LoanPlanner() {
     const annualRate = parseNum(inputs.annualRate);
     const extra = parseNum(extraMonthly) || 0;
     const lumpMap = buildLumpSumMap(lumpSums, graphStartDate);
-    return calculateAmortization(balance, annualRate, piPayment, monthlyEscrow, graphStartDate, extra, lumpMap);
-  }, [schedule, hasExtraPayments, inputs.balance, inputs.annualRate, extraMonthly, lumpSums, piPayment, monthlyEscrow, graphStartDate]);
+    return calculateAmortization(balance, annualRate, piPayment, monthlyEscrow, graphStartDate, extra, lumpMap, extraMonthlyStartMonth);
+  }, [schedule, hasExtraPayments, inputs.balance, inputs.annualRate, extraMonthly, lumpSums, piPayment, monthlyEscrow, graphStartDate, extraMonthlyStartMonth]);
 
   // Merge original + modified into combined chart rows, then downsample
   const combinedChartData = useMemo((): CombinedChartRow[] => {
@@ -277,9 +291,12 @@ export function LoanPlanner() {
       {showResults && (
         <ExtraPayments
           extraMonthly={extraMonthly}
+          extraMonthlyStartDate={extraMonthlyStartDate}
+          minExtraMonthlyDate={minExtraMonthlyDate}
           lumpSums={lumpSums}
           minDate={minLumpSumDate}
           onExtraMonthlyChange={setExtraMonthly}
+          onExtraMonthlyStartDateChange={setExtraMonthlyStartDate}
           onAddLumpSum={addLumpSum}
           onRemoveLumpSum={removeLumpSum}
           onLumpSumChange={handleLumpSumChange}

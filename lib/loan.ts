@@ -61,7 +61,8 @@ export function calculateAmortization(
   monthlyEscrow: number,
   startDate: Date,
   extraMonthly = 0,
-  lumpSumMap: Map<number, number> = new Map()
+  lumpSumMap: Map<number, number> = new Map(),
+  extraMonthlyStartMonth = 1
 ): AmortizationRow[] {
   const monthlyRate = annualRate / 100 / 12;
   const rows: AmortizationRow[] = [];
@@ -76,8 +77,9 @@ export function calculateAmortization(
       continue;
     }
 
+    const effectiveExtra = month >= extraMonthlyStartMonth ? extraMonthly : 0;
     const interestCharge = remaining * monthlyRate;
-    const regularPrincipal = Math.min(piPayment + extraMonthly - interestCharge, remaining);
+    const regularPrincipal = Math.min(piPayment + effectiveExtra - interestCharge, remaining);
 
     if (regularPrincipal <= 0) break;
 
